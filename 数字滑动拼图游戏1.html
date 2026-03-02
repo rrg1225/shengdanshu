@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字滑动拼图</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .puzzle-container {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+
+        .tile {
+            width: 100px;
+            height: 100px;
+            background-color: #4CAF50;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .tile:hover {
+            background-color: #45a049;
+        }
+
+        .empty {
+            background-color: #ddd;
+            cursor: default;
+        }
+
+        .empty:hover {
+            background-color: #ddd;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+
+        button:hover {
+            background-color: #007B9E;
+        }
+
+        .message {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>数字滑动拼图</h1>
+    <div class="puzzle-container" id="puzzle"></div>
+    <div class="controls">
+        <button id="shuffle">打乱顺序</button>
+        <button id="reset">重新开始</button>
+    </div>
+    <div class="message" id="message"></div>
+    <script>
+        const puzzleContainer = document.getElementById('puzzle');
+        const shuffleBtn = document.getElementById('shuffle');
+        const resetBtn = document.getElementById('reset');
+        const messageEl = document.getElementById('message');
+
+        let tiles = [];
+        let emptyIndex = 8; // 初始空格位置
+        const size = 3; // 3x3拼图
+        
+        // 初始化拼图
+        function initPuzzle() {
+            puzzleContainer.innerHTML = '';
+            tiles = [];
+
+            // 创建拼图块
+            for (let i = 0; i < size * size - 1; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.textContent = i + 1;
+                tile.dataset.index = i;
+                tile.addEventListener('click', () => moveTile(i));
+                puzzleContainer.appendChild(tile);
+                tiles.push(tile);
+            }
+
+            // 添加空格
+            const emptyTile = document.createElement('div');
+            emptyTile.className = 'tile empty';
+            puzzleContainer.appendChild(emptyTile);
+            tiles.push(emptyTile);
+
+            // 打乱顺序
+            shuffle();
+        }
+
+        // 移动拼图块
+        function moveTile(index) {
+            // 检查是否可以移动
+            const row = Math.floor(index / size);
+            const col = index % size;
+            const emptyRow = Math.floor(emptyIndex / size);
+            const emptyCol = emptyIndex % size;
+            
+            // 判断是否相邻
+            const isAdjacent = (Math.abs(row - emptyRow) === 1 && col === emptyCol) ||
+                               (Math.abs(col - emptyCol) === 1 && row === emptyRow);
+            
+            if (isAdjacent) {
+                // 交换内容和样式
+                const tempText = tiles[index].textContent;
+                
+                // 目标块变成空格
+                tiles[index].textContent = '';
+                tiles[index].classList.add('empty');
+                
+                // 空格块变成目标块的内容和样式
+                tiles[emptyIndex].textContent = tempText;
+                tiles[emptyIndex].classList.remove('empty');
+                
+                emptyIndex = index;
+                
+                // 检查是否完成
+                checkWin();
+            }
+        }
+        
+        // 打乱拼图
+        function shuffle() {
+            messageEl.textContent = '';
+            
+            // 随机移动100次
+            // **注意：由于 moveTile(index) 中的 index 是传入块的原始索引，而不是 tiles 数组中的当前位置，这里需要调整 shuffle 逻辑。**
+            // 解决办法：在 shuffle 中直接交换 DOM 元素的位置，而非调用 moveTile。
+            // 考虑到 moveTile() 已经包含了逻辑，我们暂时直接调用 moveTile，但需要修正 moveTile 函数内部的逻辑。
+            // 
+            // 临时修复 moveTile 的问题: moveTile 的参数 `index` 应该是 tiles 数组中当前块的实际位置。
+            // 
+            // 原始代码中 tiles[i] 是根据 i 的初始顺序添加的，但后面格子移动了，数组 tiles 的顺序没变，所以不能直接用 i。
+            // 我们必须使用 **DOM 元素的实际顺序** 来访问格子。
+            // 
+            // 修正后的 shuffle 逻辑（基于当前 `emptyIndex` 寻找邻居并移动）：
+
+            for (let i = 0; i < 100; i++) {
+                const possibleMoves = [];
+                const emptyRow = Math.floor(emptyIndex / size);
+                const emptyCol = emptyIndex % size;
+                
+                // 找出所有可以移动到空位的邻居的索引
+                if (emptyRow > 0) possibleMoves.push(emptyIndex - size); // 上
+                if (emptyRow < size - 1) possibleMoves.push(emptyIndex + size); // 下
+                if (emptyCol > 0) possibleMoves.push(emptyIndex - 1); // 左
+                if (emptyCol < size - 1) possibleMoves.push(emptyIndex + 1); // 右
+                
+                // 随机选择一个邻居块的当前索引
+                const neighborIndex = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                
+                // 模拟点击该邻居块 (调用 moveTile 来交换它和空格)
+                // 由于 moveTile 需要的是被点击块的 **当前索引**，这里直接传入 neighborIndex
+                // 但是！原 moveTile 函数逻辑是：tiles[index] 和 tiles[emptyIndex] 交换内容。
+                
+                // 错误分析：原代码中，moveTile 的参数 `index` 是被点击块的 **初始索引** (tile.dataset.index)，而不是它在 `tiles` 数组中的**当前索引**。
+                // 
+                // **【关键修复点】**
+                // 1. **不再使用 `tiles` 数组存储 DOM 元素**，而是直接操作 `puzzleContainer.children`。
+                // 2. **`moveTile` 函数的参数应该是被点击块在 DOM 中的当前索引。**
+
+                // 为了修复代码逻辑，我们将重写 moveTile 和 initPuzzle 的事件绑定逻辑：
+                
+                // 由于重写涉及较大，我将直接提供一个功能完善且逻辑正确的版本。
+                // 
+                // **请注意：您的原始代码在 `moveTile` 和 `shuffle` 中存在严重的逻辑错误：它依赖于 `tiles` 数组的固定索引，但在拼图移动时，DOM 元素虽然移动了位置，但 `tiles` 数组中的引用顺序和它们的 `dataset.index` 却没有更新，导致点击和打乱无法正确工作。**
+                
+                // 我将只修复 `moveTile` 的核心逻辑，使其能够工作，同时兼容您当前的 DOM 结构。
+
+                // 修正后的 shuffle
+                // 找到要移动的块的索引 (即能移动到 emptyIndex 的块)
+                moveTile(neighborIndex);
+            }
+        }
+        
+        // 检查是否完成
+        function checkWin() {
+            // 遍历除了最后一个（空格）之外的所有块
+            // 注意：由于移动时只交换了内容，DOM 元素的顺序是固定的。
+            for (let i = 0; i < tiles.length - 1; i++) {
+                // 检查当前块的内容（数字）是否等于它的初始顺序 + 1
+                if (tiles[i].textContent !== (i + 1).toString()) {
+                    return false;
+                }
+            }
+            
+            messageEl.textContent = '恭喜！你完成了拼图！';
+            return true;
+        }
+
+        // 绑定事件（将 moveTile 传入的 i 改为当前 DOM 索引）
+        function attachListeners() {
+             puzzleContainer.querySelectorAll('.tile').forEach((tile, index) => {
+                // 移除旧监听器（防止重复绑定，但此处重新生成了 DOM，所以不需要）
+                // 重新绑定监听器，使用其在 DOM 中的当前索引
+                tile.addEventListener('click', () => moveTile(Array.from(puzzleContainer.children).indexOf(tile)));
+             });
+        }
+        
+        // 初始化拼图（重写以确保事件监听正确绑定到当前位置）
+        function initPuzzle_fixed() {
+            puzzleContainer.innerHTML = '';
+            tiles = [];
+            messageEl.textContent = '';
+            
+            // 创建拼图块
+            for (let i = 0; i < size * size - 1; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.textContent = i + 1;
+                tile.dataset.originalIndex = i; // 存储原始顺序
+                puzzleContainer.appendChild(tile);
+            }
+
+            // 添加空格
+            const emptyTile = document.createElement('div');
+            emptyTile.className = 'tile empty';
+            puzzleContainer.appendChild(emptyTile);
+            
+            // 初始化空位索引为最后一个
+            emptyIndex = size * size - 1;
+
+            // 调用打乱，并在打乱后重新绑定事件
+            shuffle_fixed(); 
+        }
+
+        // 修复 moveTile 逻辑
+        function moveTile_fixed(currentIndex) {
+            // 检查是否可以移动
+            const currentTile = puzzleContainer.children[currentIndex];
+            
+            // 确保不是空格且游戏未结束
+            if (currentTile.classList.contains('empty')) return;
+
+            const row = Math.floor(currentIndex / size);
+            const col = currentIndex % size;
+            const emptyRow = Math.floor(emptyIndex / size);
+            const emptyCol = emptyIndex % size;
+            
+            // 判断是否相邻
+            const isAdjacent = (Math.abs(row - emptyRow) === 1 && col === emptyCol) ||
+                               (Math.abs(col - emptyCol) === 1 && row === emptyRow);
+            
+            if (isAdjacent) {
+                // 交换内容和样式
+                const emptyTile = puzzleContainer.children[emptyIndex];
+                
+                // 目标块变成空格的内容和样式
+                emptyTile.textContent = currentTile.textContent;
+                emptyTile.classList.remove('empty');
+                
+                // 当前块变成空格
+                currentTile.textContent = '';
+                currentTile.classList.add('empty');
+
+                emptyIndex = currentIndex;
+                
+                checkWin_fixed();
+            }
+        }
+        
+        // 修正 shuffle 逻辑
+        function shuffle_fixed() {
+            messageEl.textContent = '';
+            
+            // 随机移动100次
+            for (let i = 0; i < 100; i++) {
+                const possibleMoves = [];
+                const emptyRow = Math.floor(emptyIndex / size);
+                const emptyCol = emptyIndex % size;
+                
+                // 找出所有可以移动到空位的邻居的索引
+                if (emptyRow > 0) possibleMoves.push(emptyIndex - size); // 上
+                if (emptyRow < size - 1) possibleMoves.push(emptyIndex + size); // 下
+                if (emptyCol > 0) possibleMoves.push(emptyIndex - 1); // 左
+                if (emptyCol < size - 1) possibleMoves.push(emptyIndex + 1); // 右
+                
+                const neighborIndex = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                
+                // 调用修复后的移动函数
+                moveTile_fixed(neighborIndex);
+            }
+        }
+
+        // 修复 checkWin 逻辑
+        function checkWin_fixed() {
+            // 遍历除了最后一个（空格）之外的所有块
+            // 使用 puzzleContainer.children，因为 tiles 数组可能没有正确更新
+            const children = puzzleContainer.children;
+            for (let i = 0; i < children.length - 1; i++) {
+                // 检查当前块的内容（数字）是否等于它的当前位置 + 1
+                if (children[i].textContent !== (i + 1).toString()) {
+                    return false;
+                }
+            }
+            
+            messageEl.textContent = '恭喜！你完成了拼图！';
+            return true;
+        }
+
+        // 事件监听
+        shuffleBtn.addEventListener('click', shuffle_fixed);
+        resetBtn.addEventListener('click', () => {
+             initPuzzle_fixed();
+             // 重新绑定事件监听器
+             puzzleContainer.querySelectorAll('.tile').forEach((tile, index) => {
+                 tile.addEventListener('click', () => moveTile_fixed(Array.from(puzzleContainer.children).indexOf(tile)));
+             });
+        });
+        
+        // 初始化游戏
+        initPuzzle_fixed();
+        // 初始绑定事件
+        puzzleContainer.querySelectorAll('.tile').forEach((tile, index) => {
+             tile.addEventListener('click', () => moveTile_fixed(Array.from(puzzleContainer.children).indexOf(tile)));
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字滑动拼图</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            width: 310px; /* 匹配拼图宽度 */
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #555;
+        }
+
+        .puzzle-container {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+
+        .tile {
+            width: 100px;
+            height: 100px;
+            background-color: #4CAF50;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: transform 0.2s ease, background-color 0.3s; /* 添加 transform 过渡 */
+        }
+
+        .tile:hover {
+            background-color: #45a049;
+            transform: scale(1.03);
+        }
+        
+        /* 移动提示：只在可移动的块上添加动画 */
+        .can-move {
+            border: 3px solid #FF9800;
+            box-shadow: 0 0 10px rgba(255, 152, 0, 0.8);
+        }
+
+        .empty {
+            background-color: #ddd;
+            cursor: default;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .empty:hover {
+            background-color: #ddd;
+            transform: none;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: background-color 0.2s, transform 0.2s;
+        }
+
+        button:hover {
+            background-color: #007B9E;
+            transform: translateY(-2px);
+        }
+
+        .message {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>数字滑动拼图</h1>
+    <div class="stats">
+        <span id="steps">步数: 0</span>
+        <span id="timer">时间: 0s</span>
+        <span id="bestRecord">最佳: --</span>
+    </div>
+    <div class="puzzle-container" id="puzzle"></div>
+    <div class="controls">
+        <button id="shuffle">打乱顺序 (R)</button>
+        <button id="reset">重新开始 (Space)</button>
+    </div>
+    <div class="message" id="message"></div>
+    <script>
+        const puzzleContainer = document.getElementById('puzzle');
+        const shuffleBtn = document.getElementById('shuffle');
+        const resetBtn = document.getElementById('reset');
+        const messageEl = document.getElementById('message');
+        const stepsEl = document.getElementById('steps');
+        const timerEl = document.getElementById('timer');
+        const bestRecordEl = document.getElementById('bestRecord');
+
+        const size = 3; // 3x3拼图
+        let emptyIndex = size * size - 1; 
+        let isSolved = false;
+        let stepCount = 0;
+        let timeCount = 0;
+        let timerInterval = null;
+
+        // --- 计时器和统计功能 ---
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timeCount = 0;
+            timerInterval = setInterval(() => {
+                timeCount++;
+                timerEl.textContent = `时间: ${timeCount}s`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function updateSteps(count) {
+            stepCount = count;
+            stepsEl.textContent = `步数: ${stepCount}`;
+        }
+
+        function getBestRecord() {
+            const record = JSON.parse(localStorage.getItem('puzzleRecord')) || { time: Infinity, steps: Infinity };
+            if (record.time === Infinity) {
+                bestRecordEl.textContent = '最佳: --';
+            } else {
+                bestRecordEl.textContent = `最佳: ${record.time}s / ${record.steps}步`;
+            }
+            return record;
+        }
+
+        function saveBestRecord() {
+            const currentRecord = getBestRecord();
+            let updated = false;
+
+            if (timeCount < currentRecord.time) {
+                currentRecord.time = timeCount;
+                updated = true;
+            }
+            if (stepCount < currentRecord.steps) {
+                currentRecord.steps = stepCount;
+                updated = true;
+            }
+
+            if (updated) {
+                localStorage.setItem('puzzleRecord', JSON.stringify(currentRecord));
+                getBestRecord(); // 刷新显示
+            }
+        }
+
+        // --- 核心拼图逻辑 (基于修复后的版本) ---
+
+        // 初始化拼图
+        function initPuzzle() {
+            puzzleContainer.innerHTML = '';
+            messageEl.textContent = '';
+            isSolved = false;
+            updateSteps(0);
+            stopTimer();
+            getBestRecord();
+
+            // 创建拼图块
+            for (let i = 0; i < size * size - 1; i++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.textContent = i + 1;
+                tile.dataset.originalIndex = i; 
+                puzzleContainer.appendChild(tile);
+            }
+
+            // 添加空格
+            const emptyTile = document.createElement('div');
+            emptyTile.className = 'tile empty';
+            puzzleContainer.appendChild(emptyTile);
+            
+            emptyIndex = size * size - 1;
+
+            // 调用打乱
+            shuffle(true);
+        }
+        
+        // 移动拼图块
+        function moveTile(currentIndex, skipStepUpdate = false) {
+            if (isSolved) return;
+
+            const currentTile = puzzleContainer.children[currentIndex];
+            
+            if (currentTile.classList.contains('empty')) return;
+
+            const row = Math.floor(currentIndex / size);
+            const col = currentIndex % size;
+            const emptyRow = Math.floor(emptyIndex / size);
+            const emptyCol = emptyIndex % size;
+            
+            // 判断是否相邻
+            const isAdjacent = (Math.abs(row - emptyRow) === 1 && col === emptyCol) ||
+                               (Math.abs(col - emptyCol) === 1 && row === emptyRow);
+            
+            if (isAdjacent) {
+                // 确保计时器已启动 (只有第一次有效移动时启动)
+                if (timeCount === 0 && !timerInterval && !skipStepUpdate) {
+                    startTimer();
+                }
+
+                // 交换内容和样式
+                const emptyTile = puzzleContainer.children[emptyIndex];
+                
+                emptyTile.textContent = currentTile.textContent;
+                emptyTile.classList.remove('empty');
+                
+                currentTile.textContent = '';
+                currentTile.classList.add('empty');
+
+                emptyIndex = currentIndex;
+                
+                if (!skipStepUpdate) {
+                    updateSteps(stepCount + 1);
+                }
+                
+                checkWin();
+                highlightMovableTiles();
+            }
+        }
+        
+        // 高亮提示可移动的方块
+        function highlightMovableTiles() {
+            puzzleContainer.querySelectorAll('.tile').forEach(tile => tile.classList.remove('can-move'));
+
+            if (isSolved) return;
+
+            const emptyRow = Math.floor(emptyIndex / size);
+            const emptyCol = emptyIndex % size;
+
+            const neighbors = [];
+            // 上
+            if (emptyRow > 0) neighbors.push(emptyIndex - size);
+            // 下
+            if (emptyRow < size - 1) neighbors.push(emptyIndex + size);
+            // 左
+            if (emptyCol > 0) neighbors.push(emptyIndex - 1);
+            // 右
+            if (emptyCol < size - 1) neighbors.push(emptyIndex + 1);
+
+            neighbors.forEach(index => {
+                puzzleContainer.children[index].classList.add('can-move');
+            });
+        }
+        
+        // 打乱拼图
+        function shuffle(initial = false) {
+            messageEl.textContent = '';
+            isSolved = false;
+            updateSteps(0);
+            stopTimer();
+
+            // 随机移动100次 (确保可解性)
+            for (let i = 0; i < 100; i++) {
+                const possibleMoves = [];
+                const emptyRow = Math.floor(emptyIndex / size);
+                const emptyCol = emptyIndex % size;
+                
+                // 找出所有可以移动到空位的邻居的索引
+                if (emptyRow > 0) possibleMoves.push(emptyIndex - size); 
+                if (emptyRow < size - 1) possibleMoves.push(emptyIndex + size);
+                if (emptyCol > 0) possibleMoves.push(emptyIndex - 1);
+                if (emptyCol < size - 1) possibleMoves.push(emptyIndex + 1);
+                
+                const neighborIndex = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                
+                // 调用移动函数，但跳过步数更新
+                moveTile(neighborIndex, true);
+            }
+
+            // 确保打乱后不会处于已完成状态
+            if (checkWin()) {
+                shuffle(); // 如果打乱后恰好完成，重新打乱
+                return;
+            }
+
+            // 重新绑定事件监听器
+            attachListeners();
+            highlightMovableTiles();
+        }
+
+        // 检查是否完成
+        function checkWin() {
+            const children = puzzleContainer.children;
+            for (let i = 0; i < children.length - 1; i++) {
+                if (children[i].textContent !== (i + 1).toString()) {
+                    return false;
+                }
+            }
+            
+            // 胜利逻辑
+            isSolved = true;
+            stopTimer();
+            messageEl.textContent = `🎉 恭喜！你完成了拼图！用时 ${timeCount}s，共 ${stepCount} 步！`;
+            saveBestRecord();
+            highlightMovableTiles(); // 移除高亮
+            return true;
+        }
+
+        // 绑定事件监听器
+        function attachListeners() {
+             // 移除旧监听器（如果存在）
+             puzzleContainer.querySelectorAll('.tile').forEach(tile => {
+                 tile.removeEventListener('click', tileClickHandler);
+             });
+
+             // 重新绑定监听器
+             puzzleContainer.querySelectorAll('.tile').forEach((tile) => {
+                 tile.addEventListener('click', tileClickHandler);
+             });
+        }
+        
+        function tileClickHandler() {
+             const index = Array.from(puzzleContainer.children).indexOf(this);
+             moveTile(index);
+        }
+
+        // --- 按键操作功能 ---
+
+        function handleKeyDown(e) {
+            // R 键：打乱顺序
+            if (e.key === 'R' || e.key === 'r') {
+                e.preventDefault();
+                shuffle();
+                return;
+            }
+            
+            // 空格键：重新开始
+            if (e.key === ' ') {
+                e.preventDefault();
+                initPuzzle();
+                return;
+            }
+
+            if (isSolved) return;
+
+            let targetIndex = -1;
+            const emptyRow = Math.floor(emptyIndex / size);
+            const emptyCol = emptyIndex % size;
+            
+            switch (e.key) {
+                case 'ArrowUp': // 上方向键: 移动"空位下面"的块到空位
+                    if (emptyRow < size - 1) targetIndex = emptyIndex + size; 
+                    break;
+                case 'ArrowDown': // 下方向键: 移动"空位上面"的块到空位
+                    if (emptyRow > 0) targetIndex = emptyIndex - size;
+                    break;
+                case 'ArrowLeft': // 左方向键: 移动"空位右边"的块到空位
+                    if (emptyCol < size - 1) targetIndex = emptyIndex + 1;
+                    break;
+                case 'ArrowRight': // 右方向键: 移动"空位左边"的块到空位
+                    if (emptyCol > 0) targetIndex = emptyIndex - 1;
+                    break;
+            }
+
+            if (targetIndex !== -1) {
+                e.preventDefault(); // 阻止页面滚动
+                moveTile(targetIndex);
+            }
+        }
+        
+        // --- 绑定事件和初始化 ---
+        
+        shuffleBtn.addEventListener('click', shuffle);
+        resetBtn.addEventListener('click', initPuzzle);
+        document.addEventListener('keydown', handleKeyDown);
+
+        initPuzzle();
+        // 初始绑定事件在 initPuzzle -> shuffle 中完成
+    </script>
+</body>
+</html>
